@@ -88,3 +88,8 @@ ROBOTSTXT_OBEY = True
 #HTTPCACHE_DIR = 'httpcache'
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
+
+INFLUX_DB_HOST = '172.22.15.132'
+INFLUX_DB_PORT = 10086
+INFLUX_DB_USER = 'root'
+INFLUX_DB_PWD = 'root!2018'
