@@ -3,6 +3,7 @@ import scrapy
 from ..items import CrawlerItem
 from influxdb import InfluxDBClient
 from ..settings import INFLUX_DB_USER, INFLUX_DB_PWD, INFLUX_DB_HOST, INFLUX_DB_PORT
+from ..utils import str_to_utc_datetime
 
 
 class DmozSpider(scrapy.Spider):
@@ -20,6 +21,7 @@ class DmozSpider(scrapy.Spider):
 
         for option in option_list:
             date = option.xpath('@value').extract_first()
+            category = response.selector.xpath('//*[@id="ctl00_Label1"]/b/font/text()').extract_first()
             self.logger.info("Found statistical date: %s", date)
             # 查询获取到的日期是不是已经保存过，暂时保存过的日期列表存到influxDB record表中
             # record 表的结构
@@ -31,13 +33,14 @@ class DmozSpider(scrapy.Spider):
             client.switch_database(self.name)
             flag = False  # 是否已经存过
             try:
-                result = client.query('SELECT * FROM record WHERE time = {0};'.format(date))
-                self.logger.info(result)
+                sql = 'SELECT * FROM record WHERE category = \'{0}\' AND operate_code = 1 AND time = \'{1}\';'.format(category, str_to_utc_datetime(date))
+                result = client.query(sql)
                 if result:
                     flag = True
             except Exception as e:
                 pass
             if flag:
+                self.logger.info("日期：%s ，分类: %s 的数据已经处理过，跳过...", date, category)
                 break
             else:
                 VIEWSTATE = response.selector.xpath('//*[@id="__VIEWSTATE"]/@value').extract_first()
@@ -55,6 +58,8 @@ class DmozSpider(scrapy.Spider):
         date = response.selector.xpath('//*[@id="ctl00_DropDownList1"]/option[contains(@selected,"selected")]/@value').extract_first()
         category = response.selector.xpath('//*[@id="ctl00_Label1"]/b/font/text()').extract_first()
         table = response.selector.xpath('//*[@id="ctl00_GridView1"]/tr')
+        first_data_point = True
+        last_data_point = False
         for index, tr in enumerate(table):
             if index == 0 or len(tr.xpath('td')) < 4:
                 continue
@@ -67,5 +72,31 @@ class DmozSpider(scrapy.Spider):
                 if price == " " or price == "" or price is None:
                     continue
                 # self.logger.info("抓取商品：%s %s %s, 市场：%s, 价格：%s, 日期：%s.", goods, specification, unit, market, price, date)
+
+                # 记录到record表中
+                if first_data_point:
+                    self.record_gather_info(category, date)
+                    first_data_point = False
                 item = CrawlerItem(goods=goods, specification=specification, unit=unit, market=market, price=price, date=date, category=category)
                 yield item
+
+    # 将处理页面数据的记录，存到record表中
+    # 此功能需要继续完善，页面最后一条数据处理完后，添加一条operate_code = 2 的记录表示处理完成。
+    # 检查处理信息时，除了要检查是否又开始记录（operate_code = 1），还要考虑是否已经处理完成（operate_code = 2 ）。
+    # 有开始记录，没有完成记录，且开始记录的时间已经超过某个时间（30min?）可能是失败了，需要重新处理这个页面的数据
+    def record_gather_info(self, category, date):
+        client = InfluxDBClient(INFLUX_DB_HOST, INFLUX_DB_PORT, INFLUX_DB_USER, INFLUX_DB_PWD, self.name)
+        json_body = [
+            {
+                "measurement": "record",
+                "tags": {
+                    "category": category,
+                    "page_time": "", # 页面上的数据时间
+                },
+                "time": str_to_utc_datetime(date), # 这一列应该存记录时间
+                "fields": {
+                    "operate_code": 1
+                }
+            }
+        ]
+        client.write_points(json_body)

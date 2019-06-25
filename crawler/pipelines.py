@@ -13,11 +13,9 @@ logger = logging.getLogger('CrawlerPipeline')
 
 
 class CrawlerPipeline(object):
-    name = "jinan_price"
-    client = None
 
     def __init__(self):
-        self.client = InfluxDBClient(INFLUX_DB_HOST, INFLUX_DB_PORT, INFLUX_DB_USER, INFLUX_DB_PWD,database=self.name)
+        self.client = InfluxDBClient(INFLUX_DB_HOST, INFLUX_DB_PORT, INFLUX_DB_USER, INFLUX_DB_PWD)
 
     def process_item(self, item, spider):
         # 校验数据
@@ -49,5 +47,6 @@ class CrawlerPipeline(object):
                 }
             }
         ]
+        # todo: InfluxDB-Python似乎没有提供后台线程写入数据，后面考虑优化批量写入数据点
         self.client.write_points(json_body, database=spider.name)
         return item
