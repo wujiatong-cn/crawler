@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import scrapy
+from ..items import CrawlerItem
 from influxdb import InfluxDBClient
 from ..settings import INFLUX_DB_USER, INFLUX_DB_PWD, INFLUX_DB_HOST, INFLUX_DB_PORT
 
@@ -12,7 +13,7 @@ class DmozSpider(scrapy.Spider):
     ]
 
     def start_requests(self):
-        return [scrapy.Request(self.start_urls[0], callback=self.parse_index_page)]
+        yield scrapy.Request(self.start_urls[0], callback=self.parse_index_page)
 
     def parse_index_page(self, response):
         option_list = response.selector.xpath('//*[@id="ctl00_DropDownList1"]/option')
@@ -39,21 +40,32 @@ class DmozSpider(scrapy.Spider):
             if flag:
                 break
             else:
-                return self.request_price_data(response, date)
-
-    def request_price_data(self, response, date):
-        VIEWSTATE = response.selector.xpath('//*[@id="__VIEWSTATE"]/@value').extract_first()
-        VIEWSTATEGENERATOR = response.selector.xpath('//*[@id="__VIEWSTATE"]/@value').extract_first()
-        EVENTVALIDATION = response.selector.xpath('//*[@id="__EVENTVALIDATION"]/@value').extract_first()
-        request = scrapy.FormRequest(self.start_urls[0], formdata={'__EVENTTARGET': 'ctl00$DropDownList1',
-                                                                   '__VIEWSTATE': VIEWSTATE,
-                                                                   '__VIEWSTATEGENERATOR': VIEWSTATEGENERATOR,
-                                                                   '__EVENTVALIDATION': EVENTVALIDATION,
-                                                                   'ctl00$DropDownList1': date},
-                                     callback=self.parse_page_data)
-        return [request]
+                VIEWSTATE = response.selector.xpath('//*[@id="__VIEWSTATE"]/@value').extract_first()
+                VIEWSTATEGENERATOR = response.selector.xpath('//*[@id="__VIEWSTATE"]/@value').extract_first()
+                EVENTVALIDATION = response.selector.xpath('//*[@id="__EVENTVALIDATION"]/@value').extract_first()
+                request = scrapy.FormRequest(self.start_urls[0], formdata={'__EVENTTARGET': 'ctl00$DropDownList1',
+                                                                           '__VIEWSTATE': VIEWSTATE,
+                                                                           '__VIEWSTATEGENERATOR': VIEWSTATEGENERATOR,
+                                                                           '__EVENTVALIDATION': EVENTVALIDATION,
+                                                                           'ctl00$DropDownList1': date},
+                                             callback=self.parse_page_data)
+                yield request
 
     def parse_page_data(self, response):
-        self.logger.info('=================================================')
-        price = response.selector.xpath('//*[@id="ctl00_GridView1"]')
-        self.logger.info(price)
+        date = response.selector.xpath('//*[@id="ctl00_DropDownList1"]/option[contains(@selected,"selected")]/@value').extract_first()
+        category = response.selector.xpath('//*[@id="ctl00_Label1"]/b/font/text()').extract_first()
+        table = response.selector.xpath('//*[@id="ctl00_GridView1"]/tr')
+        for index, tr in enumerate(table):
+            if index == 0 or len(tr.xpath('td')) < 4:
+                continue
+            for i in range(4, len(tr.xpath('td'))):
+                goods = tr.xpath('td[1]/text()').extract_first()
+                specification = tr.xpath('td[2]/text()').extract_first()
+                unit = tr.xpath('td[3]/text()').extract_first()
+                market = table[0].xpath('th[{0}]/text()'.format(i)).extract_first()
+                price = tr.xpath('td[{0}]/text()'.format(i)).extract_first()
+                if price == " " or price == "" or price is None:
+                    continue
+                # self.logger.info("抓取商品：%s %s %s, 市场：%s, 价格：%s, 日期：%s.", goods, specification, unit, market, price, date)
+                item = CrawlerItem(goods=goods, specification=specification, unit=unit, market=market, price=price, date=date, category=category)
+                yield item

@@ -12,7 +12,9 @@ class CrawlerItem(scrapy.Item):
     # define the fields for your item here like:
     # name = scrapy.Field()
     category = scrapy.Field()
+    goods = scrapy.Field()
     specification = scrapy.Field()
     unit = scrapy.Field()
     market = scrapy.Field()
     price = scrapy.Field()
+    date = scrapy.Field(serializer=str)
