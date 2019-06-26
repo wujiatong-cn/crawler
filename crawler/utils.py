@@ -14,3 +14,7 @@ def check_blank(val):
 def str_to_utc_datetime(val):
     timestamp = datetime.strptime(val, '%Y/%m/%d %H:%M:%S').timestamp()
     return datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def get_current_utc_datetime():
+    return datetime.utcfromtimestamp(datetime.now().timestamp()).strftime('%Y-%m-%dT%H:%M:%SZ')

@@ -26,8 +26,6 @@ class CrawlerPipeline(object):
         market = item['market']
         price = item['price']
         date = str_to_utc_datetime(item['date'])
-        if check_blank(goods):
-            return
 
         # 发送到数据库
         # 检查数据库是否有记录，没有则需要在record表中记录信息
